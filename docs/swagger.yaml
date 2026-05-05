@@ -1,0 +1,93 @@
+basePath: /
+definitions:
+  handlers.HealthResponse:
+    properties:
+      status:
+        type: string
+    type: object
+  models.Product:
+    properties:
+      id:
+        type: integer
+      name:
+        minLength: 2
+        type: string
+      price:
+        type: number
+    required:
+    - name
+    - price
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: A simple Golang REST application featuring products and health check.
+  title: Golang REST API
+  version: "1.0"
+paths:
+  /health:
+    get:
+      consumes:
+      - application/json
+      description: get the status of server
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.HealthResponse'
+      summary: Show the status of server
+      tags:
+      - health
+  /products:
+    get:
+      consumes:
+      - application/json
+      description: get products
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Product'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: List products
+      tags:
+      - products
+    post:
+      consumes:
+      - application/json
+      description: add by json product
+      parameters:
+      - description: Add product
+        in: body
+        name: product
+        required: true
+        schema:
+          $ref: '#/definitions/models.Product'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Product'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Add a product
+      tags:
+      - products
+swagger: "2.0"

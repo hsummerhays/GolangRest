@@ -16,7 +16,7 @@ A simple Golang REST application featuring a basic health check endpoint.
 
 2. **Run the application**:
    ```bash
-   go run main.go
+   go run cmd/server/main.go
    ```
 
 3. **Build the application** (optional):
@@ -45,3 +45,39 @@ You can test this endpoint by navigating to [http://localhost:8080/health](http:
 ```bash
 curl http://localhost:8080/health
 ```
+
+### Get Products
+
+- **URL:** `/products`
+- **Method:** `GET`
+- **Response:**
+  ```json
+  [
+    {
+      "id": 1,
+      "name": "Espresso",
+      "price": 3.5
+    },
+    ...
+  ]
+  ```
+
+### Create Product
+
+- **URL:** `/products`
+- **Method:** `POST`
+- **Body:**
+  ```json
+  {
+      "name": "Mocha",
+      "price": 5.00
+  }
+  ```
+- **Response:**
+  ```json
+  {
+      "id": 4,
+      "name": "Mocha",
+      "price": 5.00
+  }
+  ```

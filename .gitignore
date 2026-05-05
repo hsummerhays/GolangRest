@@ -26,3 +26,7 @@ golangrest.exe
 .agents/
 .idea/
 .vscode/
+
+# SQLite databases
+*.db
+*.db-journal

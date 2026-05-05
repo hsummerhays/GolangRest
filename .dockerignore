@@ -1,0 +1,9 @@
+.git
+.gitignore
+.idea
+.vscode
+.env
+*.db
+*.db-journal
+golangrest
+golangrest.exe
