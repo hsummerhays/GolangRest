@@ -57,19 +57,18 @@ func (c *MockPricingClient) ValidatePrice(ctx context.Context, name string, pric
 			"product", name,
 		)
 
-		// Exponential Backoff with Jitter
-		// This prevents "Thundering Herd" problems in distributed systems.
-		delay := c.BaseDelay * (1 << i) // 2^i
-		jitter := time.Duration(rand.Int63n(int64(delay / 2)))
-		
-		time.Sleep(delay + jitter)
+		if i < c.MaxRetries-1 {
+			delay := c.BaseDelay * (1 << i)
+			jitter := time.Duration(rand.Int63n(int64(delay / 2)))
+			time.Sleep(delay + jitter)
+		}
 	}
 
 	return fmt.Errorf("%w: %v", ErrExternalServiceUnavailable, lastErr)
 }
 
 // doRequest simulates a flaky network call to an external service.
-func (c *MockPricingClient) doRequest(ctx context.Context, name string, price float64) error {
+func (c *MockPricingClient) doRequest(_ context.Context, _ string, price float64) error {
 	// Simulate 30% failure rate to demonstrate our retry logic
 	if rand.Float32() < 0.3 {
 		return errors.New("network timeout")

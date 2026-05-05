@@ -1,50 +1,28 @@
-# 🚀 Production-Grade Golang REST API
+# 🚀 Golang REST Service with Concurrency & Worker Pool
 
 [![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://golang.org/)
 [![Architecture](https://img.shields.io/badge/Architecture-Clean_Architecture-blue)](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
 [![Metrics](https://img.shields.io/badge/Metrics-Prometheus-orange)](http://localhost:8080/metrics)
-[![Docs](https://img.shields.io/badge/Docs-Swagger-green)](http://localhost:8080/swagger/index.html)
 
-This is not just a CRUD API—it is an **Engineering Showcase** of a resilient, highly concurrent, and observable microservice built with Go. It demonstrates how to handle high-throughput background processing, maintain system stability under load, and provide deep visibility into service health.
-
----
-
-## 🏗️ Core Engineering Pillars
-
-### 1. **High-Performance Concurrency (Worker Pool Pattern)**
-Go's goroutines are powerful, but unbounded concurrency leads to resource exhaustion. This service implements a managed **Worker Pool** (`pkg/worker/pool.go`):
-- **Asynchronous Batching:** The `POST /products/batch` endpoint offloads heavy DB write operations to a background pool and immediately returns `202 Accepted` to the client.
-- **Backpressure Management:** A buffered job queue ensures that the system doesn't drop requests, while a fixed number of workers prevents the database from being overwhelmed.
-- **Resilient SQLite:** Configured with **WAL Mode** and **Busy Timeouts** to support high-concurrency writes without "database locked" errors.
-
-### 2. **Observability & Monitoring (Golden Signals)**
-A production service is a black box without metrics. This API exposes:
-- **📊 Prometheus Metrics:** Real-time tracking of request duration (histograms) and throughput (counters) at `/metrics`.
-- **🪵 Structured Logging:** Uses `log/slog` for JSON-formatted logs, including request duration, status codes, and IP addresses for ELK/Loki ingestion.
-- **🩺 Health & Readiness:** 
-    - `/health`: Liveness probe for orchestrators (K8s).
-    - `/ready`: Readiness probe that performs an active `PingContext()` against the database.
-
-### 3. **Resilience & Distributed System Patterns**
-- **Context Propagation:** Contexts flow through every layer (Handler -> Service -> Repository). This allows for **Cascading Cancellations**—if a client disconnects, the database query is immediately aborted.
-- **Global Timeouts:** Every request is protected by a 60-second timeout middleware to prevent resource leaks.
-- **Rate Limiting:** IP-based rate limiting using a token bucket algorithm to prevent abuse and ensure fair resource distribution.
-- **Graceful Shutdown:** Handles `SIGTERM/SIGINT` to drain in-flight requests and safely stop the background worker pool before exit. **Zero data loss.**
-
-### 4. **External System Resilience (Distributed Systems)**
-Real-world systems fail. This API demonstrates how to interact with external dependencies (e.g., a Pricing Engine) safely:
-- **Retries with Exponential Backoff:** Automatic retries for flaky network calls using an increasing delay (`2^i`).
-- **Jitter:** Implements random jitter in retry intervals to prevent **Thundering Herd** problems in distributed systems.
-- **Circuit-Aware Error Handling:** Differentiates between transient network errors and hard validation failures.
-- **Context-Aware Clients:** All external calls respect the incoming request context, ensuring that if a client times out, the downstream call is immediately released.
-
+A production-oriented Go backend service demonstrating concurrent processing, structured architecture, and lifecycle management using idiomatic Go patterns.
 
 ---
 
-## 🏛️ Architecture
-The project follows **Clean Architecture** and **SOLID** principles.
+## 🎯 Purpose
+This project was built to explore Go in the context of real-world backend engineering, focusing on:
+- **Concurrent request processing** using goroutines and worker pools.
+- **Structured service architecture** (Handlers, Services, Repositories).
+- **Context propagation** and request lifecycle management.
+- **Graceful shutdown** and production readiness considerations.
 
-### **Request Flow & Concurrency Model**
+> [!NOTE]
+> While my background is primarily in **Java-based distributed systems**, this project reflects how I apply those same architectural principles—scalability, resilience, and observability—within the Go ecosystem.
+
+---
+
+## 🏛️ Architecture & Request Flow
+The service is organized into layered components to ensure separation of concerns and testability.
+
 ```mermaid
 graph TD
     Client[HTTP Client] -->|POST /products/batch| Handler[Product Handler]
@@ -58,11 +36,11 @@ graph TD
     Queue --> Worker3[Worker N]
     end
     
-    Worker1 -->|ValidatePrice| Client1[External Pricing API]
-    Worker2 -->|ValidatePrice| Client1
-    Worker3 -->|ValidatePrice| Client1
+    Worker1 -->|ValidatePrice| PricingAPI[External Pricing API]
+    Worker2 -->|ValidatePrice| PricingAPI
+    Worker3 -->|ValidatePrice| PricingAPI
     
-    Client1 -->|Success/Retry| Worker1
+    PricingAPI -->|Success/Retry| Worker1
     
     Worker1 -->|ExecContext| Repo[SQLite Repository]
     Worker2 -->|ExecContext| Repo
@@ -71,66 +49,35 @@ graph TD
     Repo -->|Write| DB[(SQLite DB WAL Mode)]
 ```
 
-### **Project Structure**
-- **Dependency Injection:** Every layer (Handler, Service, Repository) is decoupled via interfaces, enabling 100% unit test coverage with mocks.
-- **Statelessness:** Designed to scale horizontally behind a load balancer.
+---
 
-```text
-cmd/server/  - Entry point & Dependency Injection
-internal/
-  handlers/  - Transport Layer (REST/JSON)
-  services/  - Business Logic & Orchestration
-  repository/- Persistence Layer (SQLite Interface)
-pkg/
-  worker/    - Generic Concurrency Worker Pool
-  middleware/- Cross-cutting concerns (Metrics, Rate Limiting, Logging)
-```
+## 🧠 Concurrency Model (The Differentiator)
+This service avoids spawning unbounded goroutines per request. Instead, it implements a managed **Worker Pool** pattern:
+- **Controlled Throughput**: Incoming tasks are dispatched to a job queue, preventing resource exhaustion.
+- **Parallel Processing**: A fixed pool of worker goroutines processes jobs in parallel.
+- **Async Batching**: The `POST /products/batch` endpoint offloads heavy write operations, improving API responsiveness.
+- **Backpressure**: Buffered channels handle burst workloads without dropping requests.
 
 ---
 
-## 🚦 Getting Started
+## 🛡️ Resilience & Production Readiness
+This project incorporates several patterns critical for long-running, distributed services:
 
-### 1. Build & Test
-```bash
-# Run the test suite
-go test ./... -v
-
-# Generate API Documentation
-swag init -g cmd/server/main.go
-```
-
-### 2. Run Locally
-```bash
-go run cmd/server/main.go
-```
-
-The server starts on `:8080` with the following key endpoints:
-- 📖 **Swagger UI:** `http://localhost:8080/swagger/index.html`
-- 📊 **Metrics:** `http://localhost:8080/metrics`
-- 🩺 **Health:** `http://localhost:8080/health`
-- 🧪 **Readiness:** `http://localhost:8080/ready`
-
----
-
-## 🧪 Testing the Concurrency
-Witness the background worker pool in action:
-```bash
-curl -X POST -H "Content-Type: application/json" -d '[
-  {"name": "Espresso", "price": 2.50},
-  {"name": "Latte", "price": 4.00},
-  {"name": "Cappuccino", "price": 3.50}
-]' http://localhost:8080/products/batch
-```
-**Response:** `202 Accepted` (Worker pool takes over from here! Check your logs to see it working.)
+- **External System Resilience**: The `PricingClient` implements **Retries with Exponential Backoff** and **Jitter** to handle flaky dependencies safely.
+- **Observability**: Exposes **Prometheus Metrics** (`/metrics`) for latency/throughput and uses **Structured Logging** (`log/slog`) for ELK/Loki ingestion.
+- **Graceful Shutdown**: Listens for `SIGTERM/SIGINT` to drain in-flight requests and safely stop the worker pool with **zero data loss**.
+- **Context Propagation**: Contexts flow through every layer to enable **Cascading Cancellations** if a client disconnects.
+- **Rate Limiting**: IP-based rate limiting using a token bucket algorithm to prevent abuse.
 
 ---
 
 ## 🔍 Technical Implementation Highlights
 
-### **1. Concurrency: The Worker Pool**
-We avoid spawning "fire-and-forget" goroutines per request. Instead, we use a controlled pool:
+<details>
+<summary><b>1. Managed Worker Pool Logic</b></summary>
+
 ```go
-// pkg/worker/pool.go
+// Managed pool prevents "fire-and-forget" goroutine leaks
 func (p *Pool) Start(ctx context.Context) {
     for i := 0; i < p.workerCount; i++ {
         go func(id int) {
@@ -146,32 +93,59 @@ func (p *Pool) Start(ctx context.Context) {
     }
 }
 ```
+</details>
 
-### **2. Resilience: Context Propagation**
-Contexts flow from the HTTP request into the database layer to ensure queries are cancelled if the client disconnects:
+<details>
+<summary><b>2. Context-Aware Persistence</b></summary>
+
 ```go
-// internal/repository/sqlite_product_repository.go
+// Queries are cancelled if the incoming request context is timed out or cancelled
 func (r *SQLiteProductRepository) Create(ctx context.Context, p *models.Product) error {
     query := `INSERT INTO products (name, price) VALUES (?, ?)`
     _, err := r.db.ExecContext(ctx, query, p.Name, p.Price)
     return err
 }
 ```
+</details>
 
-### **3. Reliability: Graceful Shutdown**
-The application ensures that all in-flight jobs in the worker pool are finished before the process exits:
+<details>
+<summary><b>3. Resilience Retries with Jitter</b></summary>
+
 ```go
-// cmd/server/main.go
-case sig := <-shutdown:
-    slog.Info("Starting graceful shutdown", "signal", sig)
-    
-    // 1. Stop accepting new HTTP requests
-    srv.Shutdown(shutdownCtx)
-    
-    // 2. Drain and stop the worker pool
-    cancel() // Cancel context to stop idle workers
-    workerPool.Stop() // Wait for active jobs to finish
+// Prevents Thundering Herd problems in distributed systems
+delay := c.BaseDelay * (1 << i) // 100ms, 200ms, 400ms...
+jitter := time.Duration(rand.Int63n(int64(delay / 2)))
+if i < c.MaxRetries-1 {
+    time.Sleep(delay + jitter)
+}
 ```
+</details>
+
+---
+
+## 🚦 Running the Service
+
+```bash
+# 1. Run tests
+go test ./...
+
+# 2. Run service
+go run cmd/server/main.go
+```
+
+**Key Endpoints:**
+- 📖 **Swagger UI:** `http://localhost:8080/swagger/index.html`
+- 📊 **Metrics:** `http://localhost:8080/metrics`
+- 🩺 **Health:** `http://localhost:8080/health`
+- 🧪 **Readiness:** `http://localhost:8080/ready`
+
+---
+
+## 🚀 Future Improvements
+- **Persistent Message Queue**: Migrate from in-memory channels to Kafka or RabbitMQ for durable job storage.
+- **Distributed Tracing**: Implement OpenTelemetry (Jaeger) for cross-service visibility.
+- **SQL Migration Tooling**: Integrate `golang-migrate` for versioned schema management.
+- **Authentication**: JWT-based security with middleware-level authorization.
 
 ---
 *Built with ❤️ and Go 1.23*
