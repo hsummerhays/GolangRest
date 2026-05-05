@@ -21,6 +21,7 @@ import (
 	
 	_ "golangrest/docs"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // @title           Golang REST API
@@ -57,9 +58,9 @@ func main() {
 	// Global middleware
 	r.Use(chimiddleware.RequestID)
 	r.Use(chimiddleware.RealIP)
-	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(chimiddleware.Timeout(60 * time.Second))
+	r.Use(middleware.MetricsMiddleware)
 	rateLimiter := middleware.NewIPRateLimiter(rate.Limit(cfg.RateLimit), cfg.RateLimitBurst)
 	r.Use(middleware.NewRateLimitMiddleware(rateLimiter))
 
@@ -74,6 +75,9 @@ func main() {
 	r.Get("/swagger/*", httpSwagger.Handler(
 		httpSwagger.URL("http://localhost:8080/swagger/doc.json"),
 	))
+
+	// Prometheus metrics route
+	r.Handle("/metrics", promhttp.Handler())
 
 	// Setup HTTP server
 	srv := &http.Server{

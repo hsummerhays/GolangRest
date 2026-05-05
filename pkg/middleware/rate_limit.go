@@ -43,9 +43,20 @@ func (i *IPRateLimiter) GetLimiter(ip string) *rate.Limiter {
 	return limiter
 }
 
+var rateLimitExempt = map[string]bool{
+	"/health":  true,
+	"/ready":   true,
+	"/metrics": true,
+}
+
 func NewRateLimitMiddleware(limiter *IPRateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if rateLimitExempt[r.URL.Path] {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			ip, _, err := net.SplitHostPort(r.RemoteAddr)
 			if err != nil {
 				ip = r.RemoteAddr
