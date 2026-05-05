@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"golangrest/internal/models"
 	"log/slog"
@@ -13,7 +14,9 @@ type SQLiteProductRepository struct {
 }
 
 func NewSQLiteProductRepository(dbPath string) (*SQLiteProductRepository, error) {
-	db, err := sql.Open("sqlite", dbPath)
+	// Use WAL mode and busy timeout to handle concurrent writes from the worker pool
+	dsn := dbPath + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -49,8 +52,8 @@ func (r *SQLiteProductRepository) seedData() {
 	}
 }
 
-func (r *SQLiteProductRepository) GetAll() ([]models.Product, error) {
-	rows, err := r.db.Query("SELECT id, name, price FROM products")
+func (r *SQLiteProductRepository) GetAll(ctx context.Context) ([]models.Product, error) {
+	rows, err := r.db.QueryContext(ctx, "SELECT id, name, price FROM products")
 	if err != nil {
 		return nil, err
 	}
@@ -72,8 +75,8 @@ func (r *SQLiteProductRepository) GetAll() ([]models.Product, error) {
 	return products, nil
 }
 
-func (r *SQLiteProductRepository) Create(product models.Product) (models.Product, error) {
-	result, err := r.db.Exec("INSERT INTO products (name, price) VALUES (?, ?)", product.Name, product.Price)
+func (r *SQLiteProductRepository) Create(ctx context.Context, product models.Product) (models.Product, error) {
+	result, err := r.db.ExecContext(ctx, "INSERT INTO products (name, price) VALUES (?, ?)", product.Name, product.Price)
 	if err != nil {
 		return models.Product{}, err
 	}
@@ -85,4 +88,8 @@ func (r *SQLiteProductRepository) Create(product models.Product) (models.Product
 
 	product.ID = int(id)
 	return product, nil
+}
+
+func (r *SQLiteProductRepository) Ping(ctx context.Context) error {
+	return r.db.PingContext(ctx)
 }

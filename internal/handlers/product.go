@@ -5,21 +5,27 @@ import (
 	"errors"
 	"golangrest/internal/models"
 	"golangrest/internal/services"
+	"golangrest/pkg/worker"
+	"context"
 	"log/slog"
 	"net/http"
 )
 
 type productService interface {
-	GetAllProducts() ([]models.Product, error)
-	CreateProduct(product models.Product) (models.Product, error)
+	GetAllProducts(ctx context.Context) ([]models.Product, error)
+	CreateProduct(ctx context.Context, product models.Product) (models.Product, error)
 }
 
 type ProductHandler struct {
 	service productService
+	pool    *worker.Pool
 }
 
-func NewProductHandler(svc productService) *ProductHandler {
-	return &ProductHandler{service: svc}
+func NewProductHandler(svc productService, pool *worker.Pool) *ProductHandler {
+	return &ProductHandler{
+		service: svc,
+		pool:    pool,
+	}
 }
 
 // GetProducts godoc
@@ -33,7 +39,7 @@ func NewProductHandler(svc productService) *ProductHandler {
 // @Router       /products [get]
 func (h *ProductHandler) GetProducts(w http.ResponseWriter, r *http.Request) {
 	slog.Info("Handling GET /products request")
-	products, err := h.service.GetAllProducts()
+	products, err := h.service.GetAllProducts(r.Context())
 	if err != nil {
 		slog.Error("Error getting products", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -67,7 +73,7 @@ func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	createdProduct, err := h.service.CreateProduct(p)
+	createdProduct, err := h.service.CreateProduct(r.Context(), p)
 	if err != nil {
 		if errors.Is(err, services.ErrValidation) {
 			slog.Warn("Validation error on product creation", "error", err)
@@ -85,4 +91,37 @@ func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		slog.Error("Error encoding created product response", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
+}
+
+// CreateProductBatch godoc
+// @Summary      Add multiple products in background
+// @Description  Accepts an array of products and queues them for background processing
+// @Tags         products
+// @Accept       json
+// @Produce      json
+// @Param        products  body      []models.Product  true  "Array of products"
+// @Success      202       {string}  string "Accepted for processing"
+// @Failure      400       {string}  string "Bad Request"
+// @Router       /products/batch [post]
+func (h *ProductHandler) CreateProductBatch(w http.ResponseWriter, r *http.Request) {
+	slog.Info("Handling POST /products/batch request")
+	var products []models.Product
+	if err := json.NewDecoder(r.Body).Decode(&products); err != nil {
+		slog.Warn("Error decoding batch request body", "error", err)
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
+	}
+
+	// Submit each product to the worker pool
+	for _, p := range products {
+		productToCreate := p // capture loop variable
+		h.pool.Submit(func(ctx context.Context) error {
+			// Pass the worker's context to the service layer for cancellation and timeouts
+			_, err := h.service.CreateProduct(ctx, productToCreate)
+			return err
+		})
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+	w.Write([]byte(`{"status":"Accepted for processing"}`))
 }

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"golangrest/internal/models"
@@ -23,13 +24,13 @@ func NewProductService(repo repository.ProductRepository) *ProductService {
 	}
 }
 
-func (s *ProductService) GetAllProducts() ([]models.Product, error) {
-	return s.repo.GetAll()
+func (s *ProductService) GetAllProducts(ctx context.Context) ([]models.Product, error) {
+	return s.repo.GetAll(ctx)
 }
 
-func (s *ProductService) CreateProduct(product models.Product) (models.Product, error) {
+func (s *ProductService) CreateProduct(ctx context.Context, product models.Product) (models.Product, error) {
 	if err := s.validate.Struct(product); err != nil {
 		return models.Product{}, fmt.Errorf("%w: %s", ErrValidation, err.Error())
 	}
-	return s.repo.Create(product)
+	return s.repo.Create(ctx, product)
 }

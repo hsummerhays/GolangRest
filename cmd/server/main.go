@@ -7,6 +7,7 @@ import (
 	"golangrest/internal/repository"
 	"golangrest/internal/services"
 	"golangrest/pkg/middleware"
+	"golangrest/pkg/worker"
 	"log/slog"
 	"net/http"
 	"os"
@@ -42,7 +43,13 @@ func main() {
 		os.Exit(1)
 	}
 	productService := services.NewProductService(productRepo)
-	productHandler := handlers.NewProductHandler(productService)
+
+	// Initialize Background Worker Pool (3 workers, buffer size 100)
+	workerPool := worker.NewPool(3, 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	workerPool.Start(ctx)
+
+	productHandler := handlers.NewProductHandler(productService, workerPool)
 
 	// Initialize router
 	r := chi.NewRouter()
@@ -52,13 +59,16 @@ func main() {
 	r.Use(chimiddleware.RealIP)
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
+	r.Use(chimiddleware.Timeout(60 * time.Second))
 	rateLimiter := middleware.NewIPRateLimiter(rate.Limit(cfg.RateLimit), cfg.RateLimitBurst)
 	r.Use(middleware.NewRateLimitMiddleware(rateLimiter))
 
 	// Routes
 	r.Get("/health", handlers.HealthHandler)
+	r.Get("/ready", handlers.ReadyHandler(productRepo))
 	r.Get("/products", productHandler.GetProducts)
 	r.Post("/products", productHandler.CreateProduct)
+	r.Post("/products/batch", productHandler.CreateProductBatch)
 
 	// Swagger documentation route
 	r.Get("/swagger/*", httpSwagger.Handler(
@@ -93,15 +103,20 @@ func main() {
 		slog.Info("Starting shutdown", "signal", sig)
 
 		// Give outstanding requests a deadline for completion.
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
 
 		// Asking listener to shutdown and shed load.
-		if err := srv.Shutdown(ctx); err != nil {
+		if err := srv.Shutdown(shutdownCtx); err != nil {
 			slog.Error("Graceful shutdown did not complete in time", "error", err)
 			if err := srv.Close(); err != nil {
 				slog.Error("Error killing server", "error", err)
 			}
 		}
+
+		// Stop the worker pool gracefully
+		slog.Info("Shutting down worker pool")
+		cancel() // cancel the context passed to the pool to stop idle workers
+		workerPool.Stop()
 	}
 }

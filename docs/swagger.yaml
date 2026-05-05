@@ -90,4 +90,51 @@ paths:
       summary: Add a product
       tags:
       - products
+  /products/batch:
+    post:
+      consumes:
+      - application/json
+      description: Accepts an array of products and queues them for background processing
+      parameters:
+      - description: Array of products
+        in: body
+        name: products
+        required: true
+        schema:
+          items:
+            $ref: '#/definitions/models.Product'
+          type: array
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted for processing
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+      summary: Add multiple products in background
+      tags:
+      - products
+  /ready:
+    get:
+      consumes:
+      - application/json
+      description: pings the database to verify readiness
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.HealthResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            type: string
+      summary: Show the readiness of server
+      tags:
+      - health
 swagger: "2.0"

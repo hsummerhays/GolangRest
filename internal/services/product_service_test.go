@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"golangrest/internal/models"
 	"golangrest/internal/repository"
@@ -13,7 +14,7 @@ func newTestService() *ProductService {
 
 func TestProductService_GetAllProducts(t *testing.T) {
 	svc := newTestService()
-	products, err := svc.GetAllProducts()
+	products, err := svc.GetAllProducts(context.Background())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -24,7 +25,7 @@ func TestProductService_GetAllProducts(t *testing.T) {
 
 func TestProductService_CreateProduct_Valid(t *testing.T) {
 	svc := newTestService()
-	created, err := svc.CreateProduct(models.Product{Name: "Tea", Price: 2.50})
+	created, err := svc.CreateProduct(context.Background(), models.Product{Name: "Tea", Price: 2.50})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -35,7 +36,7 @@ func TestProductService_CreateProduct_Valid(t *testing.T) {
 
 func TestProductService_CreateProduct_EmptyName(t *testing.T) {
 	svc := newTestService()
-	_, err := svc.CreateProduct(models.Product{Name: "", Price: 2.50})
+	_, err := svc.CreateProduct(context.Background(), models.Product{Name: "", Price: 2.50})
 	if err == nil {
 		t.Fatal("expected validation error, got nil")
 	}
@@ -46,7 +47,7 @@ func TestProductService_CreateProduct_EmptyName(t *testing.T) {
 
 func TestProductService_CreateProduct_NameTooShort(t *testing.T) {
 	svc := newTestService()
-	_, err := svc.CreateProduct(models.Product{Name: "A", Price: 2.50})
+	_, err := svc.CreateProduct(context.Background(), models.Product{Name: "A", Price: 2.50})
 	if err == nil {
 		t.Fatal("expected validation error for name shorter than 2 chars, got nil")
 	}
@@ -57,7 +58,7 @@ func TestProductService_CreateProduct_NameTooShort(t *testing.T) {
 
 func TestProductService_CreateProduct_ZeroPrice(t *testing.T) {
 	svc := newTestService()
-	_, err := svc.CreateProduct(models.Product{Name: "Tea", Price: 0})
+	_, err := svc.CreateProduct(context.Background(), models.Product{Name: "Tea", Price: 0})
 	if err == nil {
 		t.Fatal("expected validation error for zero price, got nil")
 	}
@@ -68,7 +69,7 @@ func TestProductService_CreateProduct_ZeroPrice(t *testing.T) {
 
 func TestProductService_CreateProduct_NegativePrice(t *testing.T) {
 	svc := newTestService()
-	_, err := svc.CreateProduct(models.Product{Name: "Tea", Price: -1.0})
+	_, err := svc.CreateProduct(context.Background(), models.Product{Name: "Tea", Price: -1.0})
 	if err == nil {
 		t.Fatal("expected validation error for negative price, got nil")
 	}

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"golangrest/pkg/worker"
 )
 
 type mockProductService struct {
@@ -17,11 +19,11 @@ type mockProductService struct {
 	err      error
 }
 
-func (m *mockProductService) GetAllProducts() ([]models.Product, error) {
+func (m *mockProductService) GetAllProducts(ctx context.Context) ([]models.Product, error) {
 	return m.products, m.err
 }
 
-func (m *mockProductService) CreateProduct(product models.Product) (models.Product, error) {
+func (m *mockProductService) CreateProduct(ctx context.Context, product models.Product) (models.Product, error) {
 	if m.err != nil {
 		return models.Product{}, m.err
 	}
@@ -33,7 +35,7 @@ func TestProductHandler_GetProducts(t *testing.T) {
 	svc := &mockProductService{
 		products: []models.Product{{ID: 1, Name: "Espresso", Price: 3.50}},
 	}
-	h := NewProductHandler(svc)
+	h := NewProductHandler(svc, worker.NewPool(1, 1))
 
 	req := httptest.NewRequest(http.MethodGet, "/products", nil)
 	rr := httptest.NewRecorder()
@@ -52,7 +54,7 @@ func TestProductHandler_GetProducts(t *testing.T) {
 }
 
 func TestProductHandler_GetProducts_ServiceError(t *testing.T) {
-	h := NewProductHandler(&mockProductService{err: errors.New("db error")})
+	h := NewProductHandler(&mockProductService{err: errors.New("db error")}, worker.NewPool(1, 1))
 
 	req := httptest.NewRequest(http.MethodGet, "/products", nil)
 	rr := httptest.NewRecorder()
@@ -64,7 +66,7 @@ func TestProductHandler_GetProducts_ServiceError(t *testing.T) {
 }
 
 func TestProductHandler_CreateProduct(t *testing.T) {
-	h := NewProductHandler(&mockProductService{})
+	h := NewProductHandler(&mockProductService{}, worker.NewPool(1, 1))
 
 	body, _ := json.Marshal(models.Product{Name: "Tea", Price: 2.50})
 	req := httptest.NewRequest(http.MethodPost, "/products", bytes.NewReader(body))
@@ -85,7 +87,7 @@ func TestProductHandler_CreateProduct(t *testing.T) {
 }
 
 func TestProductHandler_CreateProduct_InvalidJSON(t *testing.T) {
-	h := NewProductHandler(&mockProductService{})
+	h := NewProductHandler(&mockProductService{}, worker.NewPool(1, 1))
 
 	req := httptest.NewRequest(http.MethodPost, "/products", bytes.NewReader([]byte("not json")))
 	rr := httptest.NewRecorder()
@@ -100,7 +102,7 @@ func TestProductHandler_CreateProduct_ValidationError(t *testing.T) {
 	svc := &mockProductService{
 		err: fmt.Errorf("%w: name required", services.ErrValidation),
 	}
-	h := NewProductHandler(svc)
+	h := NewProductHandler(svc, worker.NewPool(1, 1))
 
 	body, _ := json.Marshal(models.Product{Name: "T", Price: 2.50})
 	req := httptest.NewRequest(http.MethodPost, "/products", bytes.NewReader(body))
@@ -115,7 +117,7 @@ func TestProductHandler_CreateProduct_ValidationError(t *testing.T) {
 
 func TestProductHandler_CreateProduct_InternalError(t *testing.T) {
 	svc := &mockProductService{err: errors.New("unexpected db failure")}
-	h := NewProductHandler(svc)
+	h := NewProductHandler(svc, worker.NewPool(1, 1))
 
 	body, _ := json.Marshal(models.Product{Name: "Tea", Price: 2.50})
 	req := httptest.NewRequest(http.MethodPost, "/products", bytes.NewReader(body))

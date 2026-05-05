@@ -1,13 +1,15 @@
 package repository
 
 import (
+	"context"
 	"golangrest/internal/models"
 	"sync"
 )
 
 type ProductRepository interface {
-	GetAll() ([]models.Product, error)
-	Create(product models.Product) (models.Product, error)
+	GetAll(ctx context.Context) ([]models.Product, error)
+	Create(ctx context.Context, product models.Product) (models.Product, error)
+	Ping(ctx context.Context) error
 }
 
 type InMemoryProductRepository struct {
@@ -27,17 +29,21 @@ func NewInMemoryProductRepository() *InMemoryProductRepository {
 	}
 }
 
-func (r *InMemoryProductRepository) GetAll() ([]models.Product, error) {
+func (r *InMemoryProductRepository) GetAll(ctx context.Context) ([]models.Product, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.products, nil
 }
 
-func (r *InMemoryProductRepository) Create(product models.Product) (models.Product, error) {
+func (r *InMemoryProductRepository) Create(ctx context.Context, product models.Product) (models.Product, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	product.ID = r.nextID
 	r.nextID++
 	r.products = append(r.products, product)
 	return product, nil
+}
+
+func (r *InMemoryProductRepository) Ping(ctx context.Context) error {
+	return nil
 }

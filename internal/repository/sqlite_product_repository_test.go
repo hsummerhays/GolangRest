@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"golangrest/internal/models"
 	"testing"
 )
@@ -16,7 +17,7 @@ func newTestSQLiteRepo(t *testing.T) *SQLiteProductRepository {
 
 func TestSQLiteProductRepository_GetAll_Seeded(t *testing.T) {
 	repo := newTestSQLiteRepo(t)
-	products, err := repo.GetAll()
+	products, err := repo.GetAll(context.Background())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -29,7 +30,7 @@ func TestSQLiteProductRepository_Create(t *testing.T) {
 	repo := newTestSQLiteRepo(t)
 	product := models.Product{Name: "Mocha", Price: 5.00}
 
-	created, err := repo.Create(product)
+	created, err := repo.Create(context.Background(), product)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -43,11 +44,11 @@ func TestSQLiteProductRepository_Create(t *testing.T) {
 
 func TestSQLiteProductRepository_GetAll_AfterCreate(t *testing.T) {
 	repo := newTestSQLiteRepo(t)
-	if _, err := repo.Create(models.Product{Name: "Mocha", Price: 5.00}); err != nil {
+	if _, err := repo.Create(context.Background(), models.Product{Name: "Mocha", Price: 5.00}); err != nil {
 		t.Fatalf("unexpected error creating product: %v", err)
 	}
 
-	products, err := repo.GetAll()
+	products, err := repo.GetAll(context.Background())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
