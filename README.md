@@ -31,6 +31,14 @@ A production service is a black box without metrics. This API exposes:
 - **Rate Limiting:** IP-based rate limiting using a token bucket algorithm to prevent abuse and ensure fair resource distribution.
 - **Graceful Shutdown:** Handles `SIGTERM/SIGINT` to drain in-flight requests and safely stop the background worker pool before exit. **Zero data loss.**
 
+### 4. **External System Resilience (Distributed Systems)**
+Real-world systems fail. This API demonstrates how to interact with external dependencies (e.g., a Pricing Engine) safely:
+- **Retries with Exponential Backoff:** Automatic retries for flaky network calls using an increasing delay (`2^i`).
+- **Jitter:** Implements random jitter in retry intervals to prevent **Thundering Herd** problems in distributed systems.
+- **Circuit-Aware Error Handling:** Differentiates between transient network errors and hard validation failures.
+- **Context-Aware Clients:** All external calls respect the incoming request context, ensuring that if a client times out, the downstream call is immediately released.
+
+
 ---
 
 ## 🏛️ Architecture
@@ -49,6 +57,12 @@ graph TD
     Queue --> Worker2[Worker 2]
     Queue --> Worker3[Worker N]
     end
+    
+    Worker1 -->|ValidatePrice| Client1[External Pricing API]
+    Worker2 -->|ValidatePrice| Client1
+    Worker3 -->|ValidatePrice| Client1
+    
+    Client1 -->|Success/Retry| Worker1
     
     Worker1 -->|ExecContext| Repo[SQLite Repository]
     Worker2 -->|ExecContext| Repo

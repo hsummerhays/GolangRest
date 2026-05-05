@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"golangrest/internal/client"
 	"golangrest/internal/config"
 	"golangrest/internal/handlers"
 	"golangrest/internal/repository"
@@ -43,7 +44,10 @@ func main() {
 		slog.Error("Failed to initialize database", "error", err)
 		os.Exit(1)
 	}
-	productService := services.NewProductService(productRepo)
+
+	// External system simulation
+	pricingClient := client.NewMockPricingClient()
+	productService := services.NewProductService(productRepo, pricingClient)
 
 	// Initialize Background Worker Pool (3 workers, buffer size 100)
 	workerPool := worker.NewPool(3, 100)

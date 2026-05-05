@@ -8,8 +8,14 @@ import (
 	"testing"
 )
 
+type successPricingClient struct{}
+
+func (c *successPricingClient) ValidatePrice(ctx context.Context, name string, price float64) error {
+	return nil
+}
+
 func newTestService() *ProductService {
-	return NewProductService(repository.NewInMemoryProductRepository())
+	return NewProductService(repository.NewInMemoryProductRepository(), &successPricingClient{})
 }
 
 func TestProductService_GetAllProducts(t *testing.T) {

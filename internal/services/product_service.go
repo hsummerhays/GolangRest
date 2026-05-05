@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"golangrest/internal/client"
 	"golangrest/internal/models"
 	"golangrest/internal/repository"
 
@@ -13,14 +14,16 @@ import (
 var ErrValidation = errors.New("validation failed")
 
 type ProductService struct {
-	repo     repository.ProductRepository
-	validate *validator.Validate
+	repo          repository.ProductRepository
+	pricingClient client.PricingClient
+	validate      *validator.Validate
 }
 
-func NewProductService(repo repository.ProductRepository) *ProductService {
+func NewProductService(repo repository.ProductRepository, pricingClient client.PricingClient) *ProductService {
 	return &ProductService{
-		repo:     repo,
-		validate: validator.New(),
+		repo:          repo,
+		pricingClient: pricingClient,
+		validate:      validator.New(),
 	}
 }
 
@@ -32,5 +35,11 @@ func (s *ProductService) CreateProduct(ctx context.Context, product models.Produ
 	if err := s.validate.Struct(product); err != nil {
 		return models.Product{}, fmt.Errorf("%w: %s", ErrValidation, err.Error())
 	}
+
+	// Simulation of an external cross-boundary call with retries and failure handling
+	if err := s.pricingClient.ValidatePrice(ctx, product.Name, product.Price); err != nil {
+		return models.Product{}, fmt.Errorf("external pricing validation failed: %w", err)
+	}
+
 	return s.repo.Create(ctx, product)
 }
