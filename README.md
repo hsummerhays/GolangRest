@@ -49,13 +49,27 @@ graph TD
     Repo -->|Write| DB[(SQLite DB WAL Mode)]
 ```
 
+### 📁 Directory Layout
+The codebase is modularized using standard Go layout patterns:
+- [cmd/server/main.go](./cmd/server/main.go): The application entry point, setup of routing, dependency injection, and signal handling.
+- [internal/config/config.go](./internal/config/config.go): Config parsing with default values and support for local `.env` variables.
+- [internal/handlers/](./internal/handlers): HTTP Handlers implementing the request-response layer:
+  - [product.go](./internal/handlers/product.go): Directs product management routes including single and batch asynchronous inserts.
+  - [health.go](./internal/handlers/health.go): Handles liveness/readiness status endpoints.
+- [internal/services/](./internal/services): Core business logic orchestrating operations between handlers, external clients, and repositories.
+- [internal/repository/](./internal/repository): Data access layer implementing storage contracts:
+  - [sqlite_product_repository.go](./internal/repository/sqlite_product_repository.go): Handles product persistence using SQLite with context propagation.
+- [internal/client/pricing_client.go](./internal/client/pricing_client.go): Simulation client for communicating with an external pricing validation system.
+- [pkg/worker/pool.go](./pkg/worker/pool.go): Thread-safe background worker pool implementation that consumes concurrent jobs.
+- [pkg/middleware/](./pkg/middleware): Request filter middleware including Prometheus metrics collection and IP-based rate limiting.
+
 ---
 
 ## 🧠 Concurrency Model (The Differentiator)
 This service avoids spawning unbounded goroutines per request. Instead, it implements a managed **Worker Pool** pattern:
-- **Controlled Throughput**: Incoming tasks are dispatched to a job queue, preventing resource exhaustion.
+- **Controlled Throughput**: Incoming tasks are dispatched to a job queue, preventing resource exhaustion. Refer to the pool implementation in [pkg/worker/pool.go](./pkg/worker/pool.go).
 - **Parallel Processing**: A fixed pool of worker goroutines processes jobs in parallel.
-- **Async Batching**: The `POST /products/batch` endpoint offloads heavy write operations, improving API responsiveness.
+- **Async Batching**: The `POST /products/batch` endpoint defined in [internal/handlers/product.go](./internal/handlers/product.go) offloads heavy write operations, returning `202 Accepted` and running the validation and persistence asynchronously in the worker pool.
 - **Backpressure**: Buffered channels handle burst workloads without dropping requests.
 
 ---
@@ -63,11 +77,11 @@ This service avoids spawning unbounded goroutines per request. Instead, it imple
 ## 🛡️ Resilience & Production Readiness
 This project incorporates several patterns critical for long-running, distributed services:
 
-- **External System Resilience**: The `PricingClient` implements **Retries with Exponential Backoff** and **Jitter** to handle flaky dependencies safely.
-- **Observability**: Exposes **Prometheus Metrics** (`/metrics`) for latency/throughput and uses **Structured Logging** (`log/slog`) for ELK/Loki ingestion.
-- **Graceful Shutdown**: Listens for `SIGTERM/SIGINT` to drain in-flight requests and safely stop the worker pool with **zero data loss**.
+- **External System Resilience**: The `PricingClient` in [internal/client/pricing_client.go](./internal/client/pricing_client.go) implements **Retries with Exponential Backoff** and **Jitter** to handle flaky dependencies safely.
+- **Observability**: Exposes **Prometheus Metrics** (`/metrics`) via [pkg/middleware/](./pkg/middleware) for latency/throughput tracking and uses structured JSON logging (`log/slog`) for ELK/Loki ingestion.
+- **Graceful Shutdown**: Listens for `SIGTERM/SIGINT` in [cmd/server/main.go](./cmd/server/main.go) to drain in-flight requests and safely stop the worker pool with **zero data loss**.
 - **Context Propagation**: Contexts flow through every layer to enable **Cascading Cancellations** if a client disconnects.
-- **Rate Limiting**: IP-based rate limiting using a token bucket algorithm to prevent abuse.
+- **Rate Limiting**: IP-based rate limiting using a token bucket algorithm to prevent abuse, configured via [pkg/middleware/](./pkg/middleware).
 
 ---
 
@@ -93,6 +107,7 @@ func (p *Pool) Start(ctx context.Context) {
     }
 }
 ```
+Refer to [pkg/worker/pool.go](./pkg/worker/pool.go) for the complete implementation.
 </details>
 
 <details>
@@ -106,6 +121,7 @@ func (r *SQLiteProductRepository) Create(ctx context.Context, p *models.Product)
     return err
 }
 ```
+Refer to [sqlite_product_repository.go](./internal/repository/sqlite_product_repository.go) for details.
 </details>
 
 <details>
@@ -119,6 +135,7 @@ if i < c.MaxRetries-1 {
     time.Sleep(delay + jitter)
 }
 ```
+Refer to [internal/client/pricing_client.go](./internal/client/pricing_client.go) for details.
 </details>
 
 ---
